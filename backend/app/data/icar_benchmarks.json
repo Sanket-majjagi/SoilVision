@@ -1,0 +1,112 @@
+{
+  "_source": "Government of India — Soil Health Card Scheme (ICAR)",
+  "_note": "All values from official ICAR thresholds used in SHC programme",
+  "macronutrients": {
+    "nitrogen": {
+      "unit": "kg/ha",
+      "method": "Alkaline KMnO4",
+      "low_max": 280,
+      "medium_min": 280,
+      "medium_max": 560,
+      "high_min": 560,
+      "target_high_min": 560,
+      "thresholds": { "low": 280, "medium": 560 }
+    },
+    "phosphorus": {
+      "unit": "kg/ha",
+      "method": "Olsen's method",
+      "low_max": 10,
+      "medium_min": 10,
+      "medium_max": 25,
+      "high_min": 25,
+      "target_high_min": 25,
+      "thresholds": { "low": 10, "medium": 25 }
+    },
+    "potassium": {
+      "unit": "kg/ha",
+      "method": "NH4OAc extraction",
+      "low_max": 120,
+      "medium_min": 120,
+      "medium_max": 280,
+      "high_min": 280,
+      "target_high_min": 280,
+      "thresholds": { "low": 120, "medium": 280 }
+    },
+    "organic_carbon": {
+      "unit": "%",
+      "method": "Walkley-Black",
+      "low_max": 0.50,
+      "medium_min": 0.50,
+      "medium_max": 0.75,
+      "high_min": 0.75,
+      "thresholds": { "low": 0.50, "medium": 0.75 }
+    }
+  },
+  "micronutrients": {
+    "_note": "Values below critical_limit = Deficient. Values at or above = Sufficient.",
+    "sulphur": {
+      "unit": "mg/kg",
+      "method": "0.15% CaCl2",
+      "critical_limit": 10.0
+    },
+    "zinc": {
+      "unit": "mg/kg",
+      "method": "DTPA",
+      "critical_limit": 0.60
+    },
+    "iron": {
+      "unit": "mg/kg",
+      "method": "DTPA",
+      "critical_limit": 4.50
+    },
+    "copper": {
+      "unit": "mg/kg",
+      "method": "DTPA",
+      "critical_limit": 0.20
+    },
+    "manganese": {
+      "unit": "mg/kg",
+      "method": "DTPA",
+      "critical_limit": 2.00
+    },
+    "boron": {
+      "unit": "mg/kg",
+      "method": "Hot water",
+      "critical_limit": 0.50
+    }
+  },
+  "ph": {
+    "unit": "dimensionless",
+    "classifications": [
+      { "label": "Strongly Acidic",     "min": 0.0,  "max": 5.5  },
+      { "label": "Moderately Acidic",   "min": 5.5,  "max": 6.5  },
+      { "label": "Neutral",             "min": 6.5,  "max": 7.5  },
+      { "label": "Moderately Alkaline", "min": 7.5,  "max": 8.5  },
+      { "label": "Strongly Alkaline",   "min": 8.5,  "max": 14.0 }
+    ],
+    "ideal_min": 6.5,
+    "ideal_max": 7.5
+  },
+  "ec": {
+    "unit": "dS/m",
+    "classifications": [
+      { "label": "Normal",              "min": 0.0, "max": 1.0 },
+      { "label": "Slightly Saline",     "min": 1.0, "max": 3.0 },
+      { "label": "Moderately Saline",   "min": 3.0, "max": 4.0 },
+      { "label": "Saline (Problematic)","min": 4.0, "max": 999 }
+    ]
+  },
+  "fertility_score": {
+    "_note": "Scoring weights used in calculate_fertility_score()",
+    "macronutrient_points": { "high": 15, "medium": 10, "low": 3 },
+    "micronutrient_points": { "sufficient": 4, "deficient": 1 },
+    "ph_points":            { "ideal_6.5_to_7.5": 8, "acceptable_5.5_to_8.5": 5, "extreme": 2 },
+    "ec_points":            { "normal_lt_1": 8, "slight_lt_3": 5, "saline_ge_3": 2 },
+    "ratings": [
+      { "label": "Excellent", "min_pct": 80 },
+      { "label": "Good",      "min_pct": 60 },
+      { "label": "Fair",      "min_pct": 40 },
+      { "label": "Poor",      "min_pct": 0  }
+    ]
+  }
+}

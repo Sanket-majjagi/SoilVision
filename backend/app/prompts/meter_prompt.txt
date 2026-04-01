@@ -1,0 +1,14 @@
+Extract these soil values from this LCD soil meter photo.
+Return ONLY a JSON object with no markdown, no explanation.
+Format:
+{
+  "confidence": 0.95,
+  "nitrogen": 142,
+  "phosphorus": 11,
+  "potassium": 89,
+  "ph": 6.8,
+  "ec": 0.42,
+  "moisture": 32
+}
+If any value is not visible, use null.
+confidence = how clearly you can read the display (0.0 to 1.0)

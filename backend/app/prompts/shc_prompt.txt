@@ -1,0 +1,20 @@
+Extract soil test values from this Government Soil Health Card photo.
+Return ONLY a JSON object with no markdown, no explanation.
+Format:
+{
+  "confidence": 0.90,
+  "nitrogen": 280,
+  "phosphorus": 18,
+  "potassium": 175,
+  "ph": 7.1,
+  "ec": 0.38,
+  "organic_carbon": 0.58,
+  "sulphur": 10.2,
+  "zinc": 0.6,
+  "iron": 4.8,
+  "copper": 0.25,
+  "manganese": 2.8,
+  "boron": 0.5
+}
+If any value is not visible or not present on the card, use null.
+confidence = how clearly you can read the card (0.0 to 1.0)
