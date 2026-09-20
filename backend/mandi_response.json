@@ -1,1 +1,0 @@
-{"error": "HTTPSConnectionPool(host='api.data.gov.in', port=443): Read timed out. (read timeout=10)"}

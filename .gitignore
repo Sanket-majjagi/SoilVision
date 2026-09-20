@@ -21,3 +21,8 @@ eas-build-local/
 # OS
 .DS_Store
 Thumbs.db
+
+# Scratch / Temporary
+mandi_response.json
+out.txt
+
