@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 // ---------------------------------------------------------------------------
-// Feature card data
+// Feature card data — accent colors updated to spec
 // ---------------------------------------------------------------------------
 const FEATURES = [
   {
@@ -22,8 +22,7 @@ const FEATURES = [
     desc: 'Photograph your soil meter or Soil Health Card',
     descKn: 'ನಿಮ್ಮ ಮಣ್ಣಿನ ಮೀಟರ್ ಫೋಟೋ ತೆಗೆಯಿರಿ',
     route: 'PhotoScan',
-    accent: '#0277bd',
-    accentLight: '#e1f5fe',
+    accent: '#1565C0',
   },
   {
     id: 'manual',
@@ -33,8 +32,7 @@ const FEATURES = [
     desc: 'Enter soil values from your lab report',
     descKn: 'ನಿಮ್ಮ ಲ್ಯಾಬ್ ರಿಪೋರ್ಟ್ನಿಂದ ಮೌಲ್ಯಗಳನ್ನು ನಮೂದಿಸಿ',
     route: 'ManualEntry',
-    accent: '#2e7d32',
-    accentLight: '#e8f5e9',
+    accent: '#2E7D32',
   },
   {
     id: 'colorkit',
@@ -44,8 +42,7 @@ const FEATURES = [
     desc: 'Select Low / Medium / High from IFFCO kit',
     descKn: 'IFFCO ಕಿಟ್ನಿಂದ ಕಡಿಮೆ/ಮಧ್ಯಮ/ಹೆಚ್ಚು ಆಯ್ಕೆಮಾಡಿ',
     route: 'ColorKit',
-    accent: '#e65100',
-    accentLight: '#fff3e0',
+    accent: '#E65100',
   },
   {
     id: 'cropcheck',
@@ -55,19 +52,26 @@ const FEATURES = [
     desc: 'Check if a crop suits your soil conditions',
     descKn: 'ನಿಮ್ಮ ಮಣ್ಣಿಗೆ ಯಾವ ಬೆಳೆ ಸೂಕ್ತ ಎಂದು ತಿಳಿಯಿರಿ',
     route: 'CropCheck',
-    accent: '#558b2f',
-    accentLight: '#f1f8e9',
+    accent: '#2E7D32',
   },
 ];
 
+// Convert hex accent to rgba for soft 15% tinted icon blob backgrounds
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 // ---------------------------------------------------------------------------
-// Animated Feature Card
+// Animated Feature Card — layout untouched, styles refined
 // ---------------------------------------------------------------------------
 function FeatureCard({ feature, onPress }) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const onPressIn = () =>
-    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 30 }).start();
+    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 30 }).start();
 
   const onPressOut = () =>
     Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20 }).start();
@@ -84,8 +88,8 @@ function FeatureCard({ feature, onPress }) {
         {/* Left accent bar */}
         <View style={[styles.cardAccentBar, { backgroundColor: feature.accent }]} />
 
-        {/* Icon blob */}
-        <View style={[styles.iconBlob, { backgroundColor: feature.accentLight }]}>
+        {/* Icon blob — 15% tinted bg */}
+        <View style={[styles.iconBlob, { backgroundColor: hexToRgba(feature.accent, 0.12) }]}>
           <Text style={styles.iconEmoji}>{feature.icon}</Text>
         </View>
 
@@ -105,12 +109,12 @@ function FeatureCard({ feature, onPress }) {
 }
 
 // ---------------------------------------------------------------------------
-// Main Screen
+// Main Screen — navigation logic 100% unchanged
 // ---------------------------------------------------------------------------
 export default function HomeScreen({ navigation }) {
   return (
     <View style={styles.root}>
-      <StatusBar backgroundColor="#1a5c2e" barStyle="light-content" />
+      <StatusBar backgroundColor="#1B5E20" barStyle="light-content" />
 
       {/* ── HERO HEADER ── */}
       <View style={styles.hero}>
@@ -123,13 +127,15 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.leafCircle}>
             <Text style={styles.leafEmoji}>🌱</Text>
           </View>
-          <Text style={styles.appName}>SoilVision</Text>
+          <Text style={styles.appName}>Kisan Mitra</Text>
         </View>
 
         {/* Tagline — trilingual */}
-        <Text style={styles.taglineEn}>AI Soil Analysis for Indian Farmers</Text>
-        <Text style={styles.taglineHi}>भारतीय किसानों के लिए AI मिट्टी विश्लेषण</Text>
-        <Text style={styles.taglineKn}>ಭಾರತೀಯ ರೈತರಿಗೆ AI ಮಣ್ಣಿನ ವಿಶ್ಲೇಷಣೆ</Text>
+        <Text style={styles.taglineEn}>Farmer's Friend</Text>
+        <Text style={styles.taglineMulti}>किसान मित्र · ರೈತನ ಗೆಳೆಯ</Text>
+
+        {/* Premium golden accent line */}
+        <View style={styles.goldenLine} />
 
         {/* Wave divider */}
         <View style={styles.wave} />
@@ -154,11 +160,7 @@ export default function HomeScreen({ navigation }) {
 
         {/* ── FOOTER ── */}
         <View style={styles.footer}>
-          <Text style={styles.footerDot}>⬤ ⬤ ⬤</Text>
-          <Text style={styles.footerText}>
-            Powered by ICAR thresholds · Google Gemini AI
-          </Text>
-          <Text style={styles.footerSub}>Made for Indian farmers · v1.0</Text>
+          <Text style={styles.copyright}>© 2026 Kisan Mitra. All rights reserved.</Text>
         </View>
       </ScrollView>
     </View>
@@ -166,61 +168,58 @@ export default function HomeScreen({ navigation }) {
 }
 
 // ---------------------------------------------------------------------------
-// Styles
+// Styles — premium redesign
 // ---------------------------------------------------------------------------
-const HERO_GREEN    = '#1a5c2e';
-const HERO_GREEN2   = '#226b38';
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#f4f6f4',
+    backgroundColor: '#F4F6F4',
   },
 
   // ── Hero ──
   hero: {
-    backgroundColor: HERO_GREEN,
+    backgroundColor: '#1B5E20',
     paddingTop: Platform.OS === 'android' ? 48 : 56,
-    paddingBottom: 52,
+    paddingBottom: 54,
     paddingHorizontal: 24,
     overflow: 'hidden',
     position: 'relative',
   },
   decCircle1: {
     position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: HERO_GREEN2,
-    top: -60,
-    right: -60,
-    opacity: 0.6,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: '#2E7D32',
+    top: -70,
+    right: -70,
+    opacity: 0.55,
   },
   decCircle2: {
     position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: '#2e7d32',
-    bottom: 10,
-    left: -40,
-    opacity: 0.4,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: '#388E3C',
+    bottom: 8,
+    left: -50,
+    opacity: 0.35,
   },
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   leafCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.35)',
+    borderColor: 'rgba(255,255,255,0.30)',
   },
   leafEmoji: {
     fontSize: 26,
@@ -237,14 +236,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 4,
   },
-  taglineHi: {
+  taglineMulti: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.80)',
-    marginBottom: 2,
+    color: 'rgba(255,255,255,0.78)',
+    marginBottom: 14,
   },
-  taglineKn: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.70)',
+  goldenLine: {
+    width: 60,
+    height: 2,
+    backgroundColor: '#C8A951',
+    borderRadius: 2,
+    marginBottom: 4,
   },
   wave: {
     position: 'absolute',
@@ -252,7 +254,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 28,
-    backgroundColor: '#f4f6f4',
+    backgroundColor: '#F4F6F4',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
@@ -263,52 +265,52 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 18,
-    paddingTop: 6,
-    paddingBottom: 30,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
   sectionHeading: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#1a3a22',
-    marginBottom: 2,
+    color: '#1B5E20',
+    marginBottom: 3,
     marginTop: 8,
   },
   sectionSub: {
-    fontSize: 12,
-    color: '#7a9a7a',
+    fontSize: 13,
+    color: '#5D8A65',
     marginBottom: 18,
   },
 
   // ── Feature Card ──
   cardWrapper: {
     marginBottom: 14,
-    borderRadius: 14,
-    // Shadow
+    borderRadius: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.10,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 4,
+    backgroundColor: '#fff',
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
-    paddingVertical: 16,
+    paddingVertical: 18,
     paddingRight: 16,
   },
   cardAccentBar: {
-    width: 5,
+    width: 4,
     alignSelf: 'stretch',
-    borderTopLeftRadius: 14,
-    borderBottomLeftRadius: 14,
+    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4,
     marginRight: 14,
   },
   iconBlob: {
-    width: 54,
-    height: 54,
+    width: 52,
+    height: 52,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
@@ -332,20 +334,21 @@ const styles = StyleSheet.create({
   },
   cardDesc: {
     fontSize: 13,
-    color: '#555',
+    color: '#444',
     lineHeight: 18,
+    marginTop: 3,
   },
   cardDescKn: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#888',
     lineHeight: 16,
     marginTop: 2,
   },
   chevron: {
-    fontSize: 30,
-    fontWeight: '300',
+    fontSize: 20,
+    fontWeight: '400',
     marginLeft: 8,
-    lineHeight: 34,
+    lineHeight: 24,
   },
 
   // ── Footer ──
@@ -353,23 +356,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
     paddingTop: 18,
+    paddingBottom: 24,
     borderTopWidth: 1,
     borderTopColor: '#e0e8e0',
   },
-  footerDot: {
-    fontSize: 6,
-    color: '#4caf50',
-    letterSpacing: 4,
-    marginBottom: 8,
-  },
-  footerText: {
-    fontSize: 12,
-    color: '#888',
-    textAlign: 'center',
-  },
-  footerSub: {
+  copyright: {
     fontSize: 11,
     color: '#bbb',
-    marginTop: 4,
+    textAlign: 'center',
   },
 });
+
+

@@ -10,17 +10,29 @@ import {
 } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import harvestData from '../data/harvest_msp.json';
+import { getMandiPrices } from '../services/api';
 
-// ─── Design tokens (matches other screens) ────────────────────────────────────
+// ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  hero:     '#1a5c2e',
-  primary:  '#2e7d32',
-  accent:   '#4caf50',
-  accentLt: '#e8f5e9',
-  bg:       '#f0f4f0',
-  card:     '#ffffff',
-  label:    '#1a3a22',
-  sublabel: '#6b8f6b',
+  heroDark:    '#1B5E20',
+  heroMid:     '#2E7D32',
+  heroLight:   '#388E3C',
+  golden:      '#C8A951',
+  bg:          '#F4F6F4',
+  card:        '#ffffff',
+  primary:     '#2E7D32',
+  primaryDark: '#1B5E20',
+  accentBg:    '#E8F5E9',
+  subHero:     '#A5D6A7',
+  sublabel:    '#6b8f6b',
+  whatsapp:    '#25D366',
+
+  // Score colors by bucket
+  scorePoor:   '#D32F2F',
+  scoreFair:   '#FF8F00',
+  scoreGood:   '#2E7D32',
 };
 
 // ---------------------------------------------------------------------------
@@ -28,27 +40,34 @@ const C = {
 // ---------------------------------------------------------------------------
 
 const RATING_COLORS = {
-  Excellent: '#2e7d32',
-  Good:      '#66bb6a',
-  Fair:      '#ff9800',
-  Poor:      '#f44336',
+  Excellent: '#2E7D32',
+  Good:      '#66BB6A',
+  Fair:      '#FF8F00',
+  Poor:      '#D32F2F',
 };
 
 const RATING_BG = {
-  Excellent: '#e8f5e9',
-  Good:      '#f1f8e9',
-  Fair:      '#fff3e0',
-  Poor:      '#ffebee',
+  Excellent: '#E8F5E9',
+  Good:      '#F1F8E9',
+  Fair:      '#FFF8E1',
+  Poor:      '#FFEBEE',
 };
 
 const ratingColor = (rating) => RATING_COLORS[rating] ?? '#757575';
-const ratingBg    = (rating) => RATING_BG[rating]    ?? '#f5f5f5';
+const ratingBg    = (rating) => RATING_BG[rating]    ?? '#F5F5F5';
+
+// Score bucket helper (spec: 0-40 Poor, 41-60 Fair, 61-100 Good)
+const scoreColor = (score) => {
+  if (score <= 40) return C.scorePoor;
+  if (score <= 60) return C.scoreFair;
+  return C.scoreGood;
+};
 
 // ---------------------------------------------------------------------------
 // HTML Report Builder — UNCHANGED
 // ---------------------------------------------------------------------------
 
-const buildReportHtml = (result) => {
+const buildReportHtml = (result, weatherData, mandiData = null) => {
   const { fertility, crop_recommendations = [], fertilizer_plan = {} } = result;
   const { score = 0, rating = '—' } = fertility ?? {};
   const { land_size_acres = 0, recommendations = [], total_estimated_cost = '—' } = fertilizer_plan;
@@ -64,6 +83,23 @@ const buildReportHtml = (result) => {
       <td>${c.season ?? '—'}</td>
       <td>${c.ideal_ph ?? '—'}</td>
     </tr>`).join('');
+
+  const marketRows = top3Crops.map((c) => {
+    const cropKey = c.crop.toLowerCase();
+    const mspInfo = harvestData[cropKey];
+    const livePrice = mandiData && mandiData[cropKey] ? mandiData[cropKey] : null;
+    
+    let durationStr = mspInfo ? (mspInfo.duration === "Perennial" ? "Perennial crop" : `Ready in ${mspInfo.duration} months`) : "Expected duration unavailable";
+    let mspStr = mspInfo ? `${durationStr}<br/>${mspInfo.type}: ₹${mspInfo.price.toLocaleString('en-IN')} / quintal` : 'Data unavailable';
+    let mandiStr = livePrice ? (livePrice.min_price === livePrice.max_price ? `₹${livePrice.min_price}` : `₹${livePrice.min_price} - ₹${livePrice.max_price}`) + `<br/>(${livePrice.matched_state_name})` : 'Unavailable today';
+    
+    return `
+    <tr>
+      <td style="text-transform:capitalize;font-weight:bold;">${c.crop}</td>
+      <td>${mspStr}</td>
+      <td style="color:#2e7d32;font-weight:bold;">${mandiStr}</td>
+    </tr>`;
+  }).join('');
 
   const fertRows = recommendations
     .filter((r) => r.fertilizer !== 'Advisory')
@@ -110,6 +146,8 @@ const buildReportHtml = (result) => {
     .advisories { background: #fff8e1; border-left: 4px solid #ff9800; padding: 12px 16px; border-radius: 6px; margin-top: 14px; }
     .advisories ul { padding-left: 18px; margin-top: 6px; }
     .advisories li { font-size: 13px; color: #e65100; margin-bottom: 4px; }
+    .weather-row { display: flex; gap: 24px; flex-wrap: wrap; padding: 14px 16px; background: #f1f8e9; border-radius: 8px; border-left: 4px solid #4caf50; }
+    .weather-item { font-size: 13px; color: #333; }
     .footer { margin-top: 36px; border-top: 1px solid #ddd; padding-top: 16px; text-align: center; color: #999; font-size: 12px; }
     .footer strong { color: #4caf50; }
   </style>
@@ -118,10 +156,23 @@ const buildReportHtml = (result) => {
 
   <!-- HEADER -->
   <div class="header">
-    <h1>🌱 SoilVision Soil Report</h1>
-    <p>AI Soil Analysis for Indian Farmers</p>
+    <h1>🌱 Kisan Mitra Soil Report</h1>
+    <p>Farmer's Friend</p>
     <p class="date">Generated on: ${date}</p>
   </div>
+
+  <!-- WEATHER DATA -->
+  ${weatherData ? `
+  <div class="section">
+    <div class="section-title">Weather Data / मौसम डेटा / ಹವಾಮಾನ ಮಾಹಿತಿ</div>
+    <div style="display:flex; gap:24px; flex-wrap:wrap; padding:14px 16px; background:#f1f8e9; border-radius:8px; border-left:4px solid #4caf50;">
+      <span>📍 <strong>${weatherData.locationName || 'India'}</strong></span>
+      <span>🌡️ <strong>${weatherData.temperature}°C</strong></span>
+      <span>💧 <strong>${weatherData.humidity}%</strong> Humidity</span>
+      <span>🌧️ <strong>${weatherData.rainfall} mm</strong>/yr Rainfall</span>
+      <span style="color:#666; font-size:12px;">${weatherData.isReal ? '(Live GPS)' : '(Regional Default)'}</span>
+    </div>
+  </div>` : ''}
 
   <!-- SECTION 1: FERTILITY SCORE -->
   <div class="section">
@@ -145,6 +196,18 @@ const buildReportHtml = (result) => {
       </thead>
       <tbody>${cropRows || '<tr><td colspan="4">No data</td></tr>'}</tbody>
     </table>
+  </div>
+
+  <!-- SECTION 2.5: MARKET FORECAST -->
+  <div class="section">
+    <div class="section-title">Market & Harvest Forecast / बाज़ार पूर्वानुमान / ಮಾರುಕಟ್ಟೆ ಮುನ್ಸೂಚನೆ</div>
+    <table>
+      <thead>
+        <tr><th>Crop</th><th>Harvest & Govt Price</th><th>Live Mandi Price</th></tr>
+      </thead>
+      <tbody>${marketRows || '<tr><td colspan="3">No data</td></tr>'}</tbody>
+    </table>
+    <p style="font-size:12px; color:#666; margin-top:6px; font-style:italic;">* Live mandi prices at time of analysis</p>
   </div>
 
   <!-- SECTION 3: FERTILIZER PLAN -->
@@ -172,7 +235,7 @@ const buildReportHtml = (result) => {
 
   <!-- FOOTER -->
   <div class="footer">
-    <p>Generated by <strong>SoilVision</strong> — AI Soil Analysis for Indian Farmers</p>
+    <p>Generated by <strong>Kisan Mitra</strong> — Farmer's Friend</p>
     <p style="margin-top:4px;">Data based on ICAR soil health card thresholds · For guidance only</p>
   </div>
 
@@ -181,7 +244,47 @@ const buildReportHtml = (result) => {
 };
 
 // ---------------------------------------------------------------------------
-// Sub-components — logic UNCHANGED, styling updated
+// WeatherCard — compact card below hero, Premium Dark Green theme
+// ---------------------------------------------------------------------------
+
+function WeatherCard({ weather }) {
+  if (!weather) return null;
+  const isReal   = weather.isReal === true;
+  const location = weather.locationName || 'India';
+
+  return (
+    <View style={styles.weatherCard}>
+      {/* Location + live/default badge */}
+      <View style={styles.weatherTopRow}>
+        <Text style={styles.weatherLocation}>📍 {location}</Text>
+        <View style={[styles.weatherBadge, isReal ? styles.badgeLive : styles.badgeDefault]}>
+          <Text style={styles.weatherBadgeText}>{isReal ? '🟢 Live' : '🟡 Default'}</Text>
+        </View>
+      </View>
+
+      {/* Three metric cells */}
+      <View style={styles.weatherMetrics}>
+        <View style={styles.weatherMetricItem}>
+          <Text style={styles.weatherMetricValue}>{weather.temperature}°C</Text>
+          <Text style={styles.weatherMetricLabel}>🌡️ Temperature</Text>
+        </View>
+        <View style={styles.weatherMetricDivider} />
+        <View style={styles.weatherMetricItem}>
+          <Text style={styles.weatherMetricValue}>{weather.humidity}%</Text>
+          <Text style={styles.weatherMetricLabel}>💧 Humidity</Text>
+        </View>
+        <View style={styles.weatherMetricDivider} />
+        <View style={styles.weatherMetricItem}>
+          <Text style={styles.weatherMetricValue}>{weather.rainfall}</Text>
+          <Text style={styles.weatherMetricLabel}>🌧️ mm/year</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components — logic UNCHANGED, visual presentation updated
 // ---------------------------------------------------------------------------
 
 function SectionHeader({ dot, emoji, title }) {
@@ -194,11 +297,11 @@ function SectionHeader({ dot, emoji, title }) {
 }
 
 function ScoreCircle({ score, rating }) {
-  const color = ratingColor(rating);
+  const color = scoreColor(score);
   return (
     <View style={[styles.scoreCircle, { borderColor: color }]}>
       <Text style={[styles.scoreNumber, { color }]}>{Math.round(score)}</Text>
-      <Text style={styles.scoreLabel}>/ 100</Text>
+      <Text style={styles.scoreSlash}>/100</Text>
     </View>
   );
 }
@@ -206,24 +309,20 @@ function ScoreCircle({ score, rating }) {
 function FertilityCard({ fertility }) {
   if (!fertility) return null;
   const { score = 0, rating = 'Unknown' } = fertility;
-  const color = ratingColor(rating);
-  const bg    = ratingBg(rating);
+  const color = scoreColor(score);
+  const desc =
+    rating === 'Excellent' ? 'Your soil is in excellent condition!' :
+    rating === 'Good'      ? 'Your soil is in good condition.' :
+    rating === 'Fair'      ? 'Some nutrients need attention.' :
+                             'Significant improvements recommended.';
   return (
-    <View style={[styles.card, { backgroundColor: bg, borderLeftWidth: 5, borderLeftColor: color }]}>
-      <SectionHeader dot={color} emoji="🌱" title="Soil Fertility Score" />
+    <View style={styles.card}>
+      <SectionHeader dot={C.primaryDark} emoji="🌱" title="Soil Fertility Score" />
       <View style={styles.scoreRow}>
         <ScoreCircle score={score} rating={rating} />
         <View style={styles.ratingBlock}>
           <Text style={[styles.ratingText, { color }]}>{rating}</Text>
-          <Text style={styles.ratingSubtext}>
-            {rating === 'Excellent'
-              ? 'Your soil is in excellent condition!'
-              : rating === 'Good'
-              ? 'Your soil is in good condition.'
-              : rating === 'Fair'
-              ? 'Some nutrients need attention.'
-              : 'Significant improvements recommended.'}
-          </Text>
+          <Text style={styles.ratingSubtext}>{desc}</Text>
           <Text style={styles.ratingHint}>Based on ICAR soil health thresholds</Text>
         </View>
       </View>
@@ -231,14 +330,24 @@ function FertilityCard({ fertility }) {
   );
 }
 
-function CropCard({ rec }) {
-  const matchPct = Math.round((rec.probability || 0) * 100);
-  const matchColor = matchPct >= 70 ? C.primary : matchPct >= 40 ? '#ff9800' : '#9e9e9e';
+function CropCard({ rec, isLast, mandiData }) {
+  const matchPct   = Math.round((rec.probability || 0) * 100);
+  const rankBg     =
+    rec.rank === 1 ? C.primaryDark :
+    rec.rank === 2 ? C.heroMid     :
+    C.heroLight;
+
+  const cropKey = rec.crop.toLowerCase();
+  const mspInfo = harvestData[cropKey];
+
   return (
-    <View style={styles.cropCard}>
-      <View style={[styles.rankBadge, { backgroundColor: rec.rank === 1 ? C.primary : '#8bc34a' }]}>
+    <View style={[styles.cropRow, isLast && styles.cropRowLast]}>
+      {/* Rank badge */}
+      <View style={[styles.rankBadge, { backgroundColor: rankBg }]}>
         <Text style={styles.rankText}>#{rec.rank}</Text>
       </View>
+
+      {/* Crop info */}
       <View style={styles.cropInfo}>
         <Text style={styles.cropName}>
           {rec.crop.charAt(0).toUpperCase() + rec.crop.slice(1)}
@@ -255,9 +364,42 @@ function CropCard({ rec }) {
             </View>
           ) : null}
         </View>
+
+        {/* Harvest MSP & Mandi Info */}
+        {(mspInfo || mandiData) && (
+          <View style={styles.mspContainer}>
+            {mspInfo && (
+              <>
+                <Text style={styles.mspDuration}>⏳ {mspInfo.duration === 'Perennial' ? 'Perennial crop' : `Ready in ${mspInfo.duration} months`}</Text>
+                <Text style={styles.mspPrice}>💰 {mspInfo.type}: ₹{mspInfo.price.toLocaleString('en-IN')} per quintal</Text>
+              </>
+            )}
+            
+            {/* Live Mandi Price UI */}
+            {mandiData && (
+              <Text style={styles.mandiPrice}>
+                📈 Live Mandi:{' '}
+                {mandiData.loading ? (
+                  <Text style={{fontWeight: '400', color: '#555'}}>🔄 Fetching...</Text>
+                ) : mandiData.error || !mandiData.priceData ? (
+                  <Text style={{fontWeight: '400', color: '#888'}}>⚠️ Unavailable today</Text>
+                ) : (
+                  <Text style={{color: C.primaryDark}}>
+                    {mandiData.priceData.min_price === mandiData.priceData.max_price
+                      ? `₹${mandiData.priceData.min_price}`
+                      : `₹${mandiData.priceData.min_price} - ₹${mandiData.priceData.max_price}`
+                    } ({mandiData.priceData.matched_state_name})
+                  </Text>
+                )}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
-      <View style={[styles.matchBadge, { backgroundColor: matchColor + '18', borderColor: matchColor }]}>
-        <Text style={[styles.matchText, { color: matchColor }]}>{matchPct}%</Text>
+
+      {/* Confidence badge */}
+      <View style={styles.matchBadge}>
+        <Text style={styles.matchText}>{matchPct}%</Text>
       </View>
     </View>
   );
@@ -296,6 +438,25 @@ function FertilizerRow({ rec }) {
 
 export default function ResultsScreen({ route, navigation }) {
   const result = route?.params?.resultData;
+  const [downloadMsg, setDownloadMsg] = React.useState('');
+  
+  // Feature 2: Mandi Prices state
+  const [mandiPrices, setMandiPrices] = React.useState(null);
+  const [mandiLoading, setMandiLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    if (!result) return;
+    const fetchMandi = async () => {
+      setMandiLoading(true);
+      const crops = (result.crop_recommendations || []).map(r => r.crop);
+      const state = result.weather_data?.state || '';
+      
+      const prices = await getMandiPrices(crops, state);
+      setMandiPrices(prices);
+      setMandiLoading(false);
+    };
+    fetchMandi();
+  }, [result]);
 
   if (!result) {
     return (
@@ -309,13 +470,13 @@ export default function ResultsScreen({ route, navigation }) {
     );
   }
 
-  const { fertility, crop_recommendations = [], fertilizer_plan = {} } = result;
+  const { fertility, crop_recommendations = [], fertilizer_plan = {}, weather_data } = result;
   const { land_size_acres = 0, recommendations = [], total_estimated_cost = '—' } = fertilizer_plan;
 
-  // --- PDF generation --- UNCHANGED
+  // --- PDF generation ---
   const generatePdf = async () => {
     try {
-      const html = buildReportHtml(result);
+      const html = buildReportHtml(result, result.weather_data, mandiPrices);
       const { uri } = await Print.printToFileAsync({ html, base64: false });
       return uri;
     } catch (err) {
@@ -325,17 +486,29 @@ export default function ResultsScreen({ route, navigation }) {
   };
 
   const handleDownload = async () => {
+    setDownloadMsg('');
     const uri = await generatePdf();
     if (!uri) return;
-    const canShare = await Sharing.isAvailableAsync();
-    if (canShare) {
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Save SoilVision Report',
-        UTI: 'com.adobe.pdf',
-      });
-    } else {
-      Alert.alert('Saved', `Report saved to:\n${uri}`);
+
+    try {
+      if (Platform.OS === 'android') {
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (permissions.granted) {
+          const fileName = `KisanMitra_Report_${Date.now()}.pdf`;
+          const base64Uri = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+          const newUri = await FileSystem.StorageAccessFramework.createFileAsync(permissions.directoryUri, fileName, 'application/pdf');
+          await FileSystem.writeAsStringAsync(newUri, base64Uri, { encoding: FileSystem.EncodingType.Base64 });
+          setDownloadMsg("✅ Report saved! Check your selected folder.");
+        } else {
+          try { await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' }); } catch(err) {}
+          setDownloadMsg("");
+        }
+      } else {
+        try { await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' }); } catch(err) {}
+        setDownloadMsg("");
+      }
+    } catch (e) {
+      Alert.alert('Download Error', 'Could not save the file: ' + e.message);
     }
   };
 
@@ -356,19 +529,30 @@ export default function ResultsScreen({ route, navigation }) {
   };
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-
-      {/* ── Hero Banner ── */}
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* ── Hero — matches all other screens exactly ── */}
       <View style={styles.hero}>
-        <View style={styles.decCircle} />
+        <View style={styles.decCircle1} />
+        <View style={styles.decCircle2} />
+
         <Text style={styles.heroEmoji}>🌱</Text>
         <Text style={styles.heroTitle}>Analysis Results</Text>
         <Text style={styles.heroSub}>विश्लेषण परिणाम  ·  ವಿಶ್ಲೇಷಣೆ ಫಲಿತಾಂಶ</Text>
+
+        <View style={styles.goldenLine} />
+        <View style={styles.wave} />
       </View>
 
       <View style={styles.body}>
 
-        {/* Section 1: Fertility */}
+        {/* Weather Card — GPS location + live climate data */}
+        <WeatherCard weather={result.weather_data} />
+
+        {/* Section 1: Fertility Score */}
         <FertilityCard fertility={fertility} />
 
         {/* Section 2: Crop Recommendations */}
@@ -377,16 +561,36 @@ export default function ResultsScreen({ route, navigation }) {
           {crop_recommendations.length === 0 ? (
             <Text style={styles.emptyText}>No crop data available.</Text>
           ) : (
-            crop_recommendations.map((rec, i) => (
-              <CropCard key={i} rec={rec} />
-            ))
+            crop_recommendations.map((rec, i) => {
+              // Pass the specific crop's mandi data perfectly structured
+              const cropKey = rec.crop.toLowerCase();
+              const cropMandiData = {
+                loading: mandiLoading,
+                error: !mandiLoading && (!mandiPrices || Object.keys(mandiPrices).length === 0),
+                priceData: mandiPrices ? mandiPrices[cropKey] : null,
+              };
+
+              return (
+                <CropCard
+                  key={i}
+                  rec={rec}
+                  isLast={i === crop_recommendations.length - 1}
+                  mandiData={cropMandiData}
+                />
+              );
+            })
           )}
         </View>
 
         {/* Section 3: Fertilizer Plan */}
         <View style={styles.card}>
-          <SectionHeader dot="#e65100" emoji="💊" title="Fertilizer Plan" />
-          <Text style={styles.landText}>🌍 Land Size: {land_size_acres} acres</Text>
+          <SectionHeader dot="#E65100" emoji="💊" title="Fertilizer Plan" />
+
+          <View style={styles.landRow}>
+            <Text style={styles.landText}>🌍  Land Size: </Text>
+            <Text style={styles.landValue}>{land_size_acres} acres</Text>
+          </View>
+
           {recommendations.length === 0 ? (
             <View style={styles.excellentBox}>
               <Text style={styles.excellentText}>
@@ -406,6 +610,13 @@ export default function ResultsScreen({ route, navigation }) {
           )}
         </View>
 
+        {/* ── Download success box ── */}
+        {downloadMsg ? (
+          <View style={styles.statusBox}>
+            <Text style={styles.statusText}>{downloadMsg}</Text>
+          </View>
+        ) : null}
+
         {/* ── Action Buttons ── */}
         <TouchableOpacity style={styles.btnOutline} onPress={() => navigation.navigate('Home')}>
           <Text style={styles.btnOutlineText}>🔄 New Analysis</Text>
@@ -418,193 +629,416 @@ export default function ResultsScreen({ route, navigation }) {
         <TouchableOpacity style={styles.btnWhatsApp} onPress={handleWhatsApp}>
           <Text style={styles.btnWhatsAppText}>💬 Share on WhatsApp</Text>
         </TouchableOpacity>
+
       </View>
     </ScrollView>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Styles
+// Styles — premium redesign
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
+  container: { flexGrow: 1 },
 
   // ── Hero ──
   hero: {
-    backgroundColor: C.hero,
-    paddingTop: Platform.OS === 'android' ? 50 : 58,
-    paddingBottom: 52,
+    backgroundColor: C.heroDark,
+    paddingTop: Platform.OS === 'android' ? 48 : 56,
+    paddingBottom: 54,
     paddingHorizontal: 24,
     overflow: 'hidden',
     position: 'relative',
   },
-  decCircle: {
-    position: 'absolute', width: 200, height: 200, borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -50,
+  decCircle1: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: '#2E7D32',
+    top: -70,
+    right: -70,
+    opacity: 0.55,
   },
-  heroEmoji: { fontSize: 36, marginBottom: 8 },
-  heroTitle: { fontSize: 28, fontWeight: '800', color: '#fff', marginBottom: 4 },
-  heroSub:   { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
+  decCircle2: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: '#388E3C',
+    bottom: 8,
+    left: -50,
+    opacity: 0.35,
+  },
+  heroEmoji: { fontSize: 30, marginBottom: 8 },
+  heroTitle: { fontSize: 30, fontWeight: '800', color: '#ffffff', marginBottom: 4, letterSpacing: 0.3 },
+  heroSub:   { fontSize: 13, color: C.subHero, marginBottom: 14 },
+  goldenLine: {
+    width: 60,
+    height: 2,
+    backgroundColor: C.golden,
+    borderRadius: 2,
+    marginBottom: 4,
+  },
+  wave: {
+    position: 'absolute',
+    bottom: -1,
+    left: 0,
+    right: 0,
+    height: 28,
+    backgroundColor: C.bg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+
+  // ── Weather Card ──
+  weatherCard: {
+    backgroundColor: C.card,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
+    marginBottom: 14,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: C.primary,
+  },
+  weatherTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  weatherLocation: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.primaryDark,
+    flex: 1,
+  },
+  weatherBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  badgeLive:    { backgroundColor: '#E8F5E9' },
+  badgeDefault: { backgroundColor: '#FFF8E1' },
+  weatherBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.primaryDark,
+  },
+  weatherMetrics: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  weatherMetricItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  weatherMetricValue: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: C.primaryDark,
+    marginBottom: 2,
+  },
+  weatherMetricLabel: {
+    fontSize: 11,
+    color: C.sublabel,
+    fontWeight: '500',
+  },
+  weatherMetricDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#E0E0E0',
+    marginHorizontal: 8,
+  },
 
   // ── Body ──
   body: {
-    padding: 16, paddingBottom: 48, marginTop: -20,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 16,
+    paddingBottom: 48,
     backgroundColor: C.bg,
   },
-  container: {},
 
-  // ── Error ──
+  // ── Error state ──
   errorContainer: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    padding: 24, backgroundColor: C.bg,
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: C.bg,
   },
   errorEmoji: { fontSize: 48, marginBottom: 12 },
   errorText:  { fontSize: 16, color: C.sublabel, marginBottom: 24 },
 
   // ── Cards ──
   card: {
-    backgroundColor: C.card, borderRadius: 16,
-    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12,
-    marginBottom: 14, elevation: 3,
-    shadowColor: '#1a5c2e', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 6,
+    backgroundColor: C.card,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+    marginBottom: 14,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
   },
 
   // ── Section header ──
   sectionHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    marginBottom: 14, paddingBottom: 10,
-    borderBottomWidth: 1, borderBottomColor: '#eef4ee',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF4EE',
   },
-  sectionDot:  { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
-  sectionTitle:{ fontSize: 16, fontWeight: '700', color: C.label },
+  sectionDot:   { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: C.primaryDark, flex: 1 },
 
   // ── Fertility score ──
-  scoreRow: { flexDirection: 'row', alignItems: 'center' },
-  scoreCircle: {
-    width: 96, height: 96, borderRadius: 48,
-    borderWidth: 6, justifyContent: 'center', alignItems: 'center',
-    marginRight: 20, backgroundColor: '#fff',
-    elevation: 2, shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  scoreNumber: { fontSize: 32, fontWeight: '800' },
-  scoreLabel:  { fontSize: 11, color: '#aaa', fontWeight: '600' },
+  scoreCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 20,
+    backgroundColor: '#fff',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  scoreNumber: { fontSize: 28, fontWeight: '800', lineHeight: 32 },
+  scoreSlash:  { fontSize: 12, color: '#888', fontWeight: '600' },
   ratingBlock: { flex: 1 },
-  ratingText:  { fontSize: 26, fontWeight: '800', marginBottom: 4 },
-  ratingSubtext: { fontSize: 14, color: '#555', lineHeight: 20 },
-  ratingHint: { fontSize: 11, color: C.sublabel, marginTop: 4 },
+  ratingText:  { fontSize: 22, fontWeight: '800', marginBottom: 6 },
+  ratingSubtext: { fontSize: 13, color: '#555', lineHeight: 19, marginBottom: 6 },
+  ratingHint: { fontSize: 11, color: '#888', fontStyle: 'italic' },
 
-  // ── Crop card ──
-  cropCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: C.accentLt, borderRadius: 12,
-    padding: 12, marginBottom: 10,
-    borderLeftWidth: 4, borderLeftColor: C.accent,
+  // ── Crop rows ──
+  cropRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    gap: 12,
+  },
+  cropRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 4,
   },
   rankBadge: {
-    width: 38, height: 38, borderRadius: 19,
-    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
   },
   rankText: { color: '#fff', fontWeight: '800', fontSize: 14 },
   cropInfo: { flex: 1 },
   cropName: {
-    fontSize: 16, fontWeight: '800', color: C.primary,
-    textTransform: 'capitalize', marginBottom: 6,
+    fontSize: 16,
+    fontWeight: '800',
+    color: C.primaryDark,
+    textTransform: 'capitalize',
+    marginBottom: 6,
   },
   cropPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   pill: {
-    backgroundColor: '#fff', borderRadius: 20,
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderWidth: 1, borderColor: '#d0e4d0',
+    backgroundColor: C.accentBg,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  pillText: { fontSize: 11, color: C.sublabel, fontWeight: '600' },
+  pillText: { fontSize: 11, color: C.primary, fontWeight: '600' },
   matchBadge: {
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 20, borderWidth: 1.5,
-    minWidth: 48, alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minWidth: 48,
+    alignItems: 'center',
   },
-  matchText: { fontSize: 13, fontWeight: '800' },
-  emptyText: { color: '#aaa', fontStyle: 'italic' },
+  matchText: { fontSize: 13, color: '#888', fontWeight: '700' },
+  emptyText: { color: '#aaa', fontStyle: 'italic', paddingVertical: 8 },
 
-  // ── Land text ──
-  landText: {
-    fontSize: 13, fontWeight: '600', color: C.sublabel,
+  // Harvest MSP
+  mspContainer: {
+    marginTop: 8,
+    gap: 2,
+  },
+  mspDuration: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: '500',
+  },
+  mspPrice: {
+    fontSize: 12,
+    color: C.primaryDark,
+    fontWeight: '700',
+  },
+  mandiPrice: {
+    fontSize: 12,
+    color: C.primaryDark,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+
+  // ── Land size row ──
+  landRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
   },
+  landText:  { fontSize: 13, color: '#555' },
+  landValue: { fontSize: 13, color: '#555', fontWeight: '700' },
 
   // ── Excellent box ──
   excellentBox: {
-    backgroundColor: C.accentLt, borderRadius: 10,
-    padding: 14, borderLeftWidth: 4, borderLeftColor: C.accent,
+    backgroundColor: C.accentBg,
+    borderRadius: 10,
+    padding: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: C.primary,
   },
   excellentText: { fontSize: 15, fontWeight: '700', color: C.primary },
 
-  // ── Fertilizer row ──
+  // ── Fertilizer row — white sub-card with green left border ──
   fertRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#f7faf7', borderRadius: 12,
-    padding: 14, marginBottom: 10,
-    borderWidth: 1.5, borderColor: '#d0e4d0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: C.primary,
   },
-  fertLeft: { flex: 1 },
-  fertName: { fontSize: 15, fontWeight: '800', color: C.label, marginBottom: 3 },
-  fertPurpose: { fontSize: 12, color: C.sublabel, marginBottom: 3 },
-  fertQty: { fontSize: 12, color: '#777' },
+  fertLeft:    { flex: 1 },
+  fertName:    { fontSize: 15, fontWeight: '800', color: C.primaryDark, marginBottom: 3 },
+  fertPurpose: { fontSize: 12, color: '#666', marginBottom: 3 },
+  fertQty:     { fontSize: 12, color: '#888' },
   fertCostBox: {
-    backgroundColor: C.accentLt, borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderWidth: 1, borderColor: '#a5d6a7',
-    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.accentBg,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
     minWidth: 72,
   },
-  fertCost: { fontSize: 14, fontWeight: '800', color: C.primary },
+  fertCost: { fontSize: 13, fontWeight: '800', color: C.primary },
 
-  // ── Advisory ──
+  // ── Advisory / warning box ──
   advisoryRow: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: '#fff8e1', borderRadius: 10,
-    padding: 12, marginBottom: 10,
-    borderLeftWidth: 4, borderLeftColor: '#ff9800', gap: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFF8E1',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#E65100',
+    gap: 8,
   },
   advisoryIcon: { fontSize: 16 },
-  advisoryText: { flex: 1, fontSize: 13, color: '#e65100', lineHeight: 20 },
+  advisoryText: { flex: 1, fontSize: 13, color: '#E65100', lineHeight: 20 },
 
-  // ── Total row ──
+  // ── Total cost row ──
   totalRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginTop: 12, paddingTop: 12,
-    borderTopWidth: 1.5, borderTopColor: '#d0e4d0',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 14,
+    borderTopWidth: 1.5,
+    borderTopColor: '#EEF4EE',
   },
-  totalLabel: { fontSize: 15, fontWeight: '700', color: C.label },
-  totalCost:  { fontSize: 22, fontWeight: '800', color: C.primary },
+  totalLabel: { fontSize: 16, fontWeight: '700', color: C.primaryDark },
+  totalCost:  { fontSize: 20, fontWeight: '800', color: C.primaryDark },
 
-  // ── Buttons ──
+  // ── Status box (after download) ──
+  statusBox: {
+    backgroundColor: C.accentBg,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.primary,
+    padding: 14,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: C.primary,
+  },
+  statusText: {
+    color: C.primaryDark,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+
+  // ── Action buttons ──
+
+  // New Analysis — white, green border
   btnOutline: {
-    borderWidth: 2, borderColor: C.primary,
-    paddingVertical: 16, borderRadius: 14,
-    alignItems: 'center', marginBottom: 12,
+    height: 52,
+    borderWidth: 2,
+    borderColor: C.primaryDark,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
     backgroundColor: '#fff',
   },
-  btnOutlineText: { fontSize: 17, fontWeight: '800', color: C.primary },
+  btnOutlineText: { fontSize: 17, fontWeight: '800', color: C.primaryDark },
 
+  // Download Report — solid green, elevated
   btnSolid: {
-    backgroundColor: C.primary,
-    paddingVertical: 16, borderRadius: 14,
-    alignItems: 'center', marginBottom: 12,
-    elevation: 5, shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
+    height: 56,
+    backgroundColor: C.primaryDark,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    elevation: 6,
+    shadowColor: C.primaryDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
   },
   btnSolidText: { fontSize: 17, fontWeight: '800', color: '#fff' },
 
+  // Share on WhatsApp — white, WhatsApp green border
   btnWhatsApp: {
+    height: 52,
     backgroundColor: '#fff',
-    paddingVertical: 16, borderRadius: 14,
-    alignItems: 'center', marginBottom: 16,
-    borderWidth: 2, borderColor: C.accent,
-    elevation: 1,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: C.whatsapp,
   },
-  btnWhatsAppText: { fontSize: 17, fontWeight: '800', color: C.accent },
+  btnWhatsAppText: { fontSize: 17, fontWeight: '800', color: C.whatsapp },
 });

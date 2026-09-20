@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Float, DateTime, JSON, Uuid
 from app.core.database import Base
 
@@ -7,7 +7,7 @@ class Session(Base):
     __tablename__ = "sessions"
 
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     input_method = Column(String)
     land_size_acres = Column(Float)

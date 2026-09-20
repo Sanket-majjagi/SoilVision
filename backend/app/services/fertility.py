@@ -115,7 +115,10 @@ def calculate_fertility_score(soil_data: dict) -> dict:
         ("potassium",      "kg/ha"),
         ("organic_carbon", "%"),
     ]:
-        val = float(soil_data[key])
+        try:
+            val = float(soil_data.get(key, 0.0) or 0.0)
+        except (ValueError, TypeError):
+            val = 0.0
         rating = _macro_rating(key, val)
         score += _MACRO_POINTS[rating]
         macro_breakdown[key] = {"value": val, "unit": unit, "rating": rating}
@@ -123,13 +126,20 @@ def calculate_fertility_score(soil_data: dict) -> dict:
     # --- Micronutrients: 24 points total (4 each × 6) ---
     micro_breakdown: dict = {}
     for key in ["sulphur", "zinc", "iron", "copper", "manganese", "boron"]:
-        val = float(soil_data[key])
+        try:
+            val = float(soil_data.get(key, 0.0) or 0.0)
+        except (ValueError, TypeError):
+            val = 0.0
         status = _micro_status(key, val)
         score += _MICRO_POINTS[status]
         micro_breakdown[key] = {"value": val, "status": status}
 
     # --- pH: 8 points ---
-    ph = float(soil_data["ph"])
+    try:
+        ph = float(soil_data.get("ph", 7.0) or 7.0)
+    except (ValueError, TypeError):
+        ph = 7.0
+        
     if 6.5 <= ph <= 7.5:
         score += 8
     elif 5.5 <= ph <= 8.5:
@@ -139,7 +149,11 @@ def calculate_fertility_score(soil_data: dict) -> dict:
     ph_breakdown = {"value": ph, "classification": _ph_classification(ph)}
 
     # --- EC: 8 points ---
-    ec = float(soil_data["ec"])
+    try:
+        ec = float(soil_data.get("ec", 0.5) or 0.5)
+    except (ValueError, TypeError):
+        ec = 0.5
+        
     if ec < 1.0:
         score += 8
     elif ec < 3.0:

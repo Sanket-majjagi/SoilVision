@@ -9,7 +9,7 @@ def setup_exception_handlers(app: FastAPI):
             status_code=422,
             content={
                 "error": "Validation Error",
-                "details": exc.errors(),
+                "details": str(exc),
                 "status_code": 422
             }
         )

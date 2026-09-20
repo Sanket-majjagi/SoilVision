@@ -8,11 +8,17 @@ router = APIRouter(tags=["Vision API"])
 
 @router.post("/vision/analyze")
 async def process_vision_image(
-    file: UploadFile = File(...), 
-    image_type: str = Form(...)
+    file: UploadFile = File(...),
+    image_type: str  = Form(...),
+    temperature: float = Form(28.5),
+    humidity:    float = Form(72.0),
+    rainfall:    float = Form(1200.0),
 ) -> dict:
-    """Analyze soil meter or soil health card via Vision AI and run full analysis pipeline."""
-    
+    """Analyze soil meter or soil health card via Vision AI and run full analysis pipeline.
+    Accepts optional temperature/humidity/rainfall Form fields so the frontend
+    can inject real GPS-based weather — defaults match old hardcoded values.
+    """
+
     if image_type not in ["meter", "shc"]:
         raise HTTPException(status_code=400, detail="image_type must be 'meter' or 'shc'")
         
@@ -36,6 +42,9 @@ async def process_vision_image(
     
     if image_type == "meter":
         readings = convert_meter_to_shc(readings)
+
+    # Scrub None/null values explicitly so `.setdefault(...)` works
+    readings = {k: v for k, v in readings.items() if v is not None}
         
     # Pad readings with defaults for full 12-parameter analysis
     readings.setdefault("nitrogen", 0.0)
@@ -51,11 +60,15 @@ async def process_vision_image(
     readings.setdefault("manganese", 3.0)
     readings.setdefault("boron", 0.3)
     
-    # Run full analysis pipeline
+    # Run full analysis pipeline with real climate data from frontend
     result = _build_response(
         soil_dict=readings,
         land_acres=1.0,
-        climate={"temperature": 28.5, "humidity": 72.0, "rainfall": 1200.0},
+        climate={
+            "temperature": temperature,
+            "humidity":    humidity,
+            "rainfall":    rainfall,
+        },
         input_method="vision"
     )
     

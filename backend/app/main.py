@@ -5,16 +5,19 @@ FastAPI application entry point — SoilVision backend.
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Load .env before anything else reads os.getenv()
-load_dotenv()
+# Load .env relative to this file — works regardless of CWD / how uvicorn is launched
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=_ENV_PATH)
 
-from app.routers import crops, soil, vision
+from app.routers import soil, vision, crops, weather, market
 from app.services.crop_recommender import get_recommender
 from app.core.exceptions import setup_exception_handlers
 
@@ -66,7 +69,6 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # CORS — allow all origins in dev; restrict in production via env var
 # ---------------------------------------------------------------------------
-import os
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
 allowed_origins = (
     ["*"] if allowed_origins_env == "*"
@@ -84,9 +86,11 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
-app.include_router(soil.router,  prefix="/api/v1")
-app.include_router(crops.router, prefix="/api/v1")
+app.include_router(soil.router,    prefix="/api/v1")
 app.include_router(vision.router, prefix="/api/v1")
+app.include_router(crops.router, prefix="/api/v1")
+app.include_router(weather.router, prefix="/api/v1")
+app.include_router(market.router, prefix="/api/v1")
 
 # Exception Setup
 setup_exception_handlers(app)

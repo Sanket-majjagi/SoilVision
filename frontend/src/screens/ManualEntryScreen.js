@@ -11,21 +11,33 @@ import {
   Platform,
 } from 'react-native';
 import { analyzeSoil } from '../services/api';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 const C = {
-  hero:       '#1a5c2e',
-  primary:    '#2e7d32',
-  accent:     '#4caf50',
-  accentLt:   '#e8f5e9',
-  bg:         '#f0f4f0',
-  card:       '#ffffff',
-  label:      '#1a3a22',
-  sublabel:   '#6b8f6b',
-  inputBg:    '#f7faf7',
-  inputBdr:   '#d0e4d0',
-  placeholder:'#a8c4a8',
-  disabled:   '#81c784',
+  heroDark:    '#1B5E20',
+  heroMid:     '#2E7D32',
+  heroLight:   '#388E3C',
+  golden:      '#C8A951',
+  bg:          '#F4F6F4',
+  card:        '#ffffff',
+  primary:     '#2E7D32',
+  primaryDark: '#1B5E20',
+  accentBg:    '#E8F5E9',
+  accentText:  '#2E7D32',
+  labelColor:  '#2D2D2D',
+  unitColor:   '#888888',
+  inputBg:     '#F9FFF9',
+  inputBdr:    '#C8E6C9',
+  inputFocus:  '#2E7D32',
+  inputText:   '#1B5E20',
+  placeholder: '#A5D6A7',
+  subHero:     '#A5D6A7',
+  errorBg:     '#ffffff',
+  errorBdr:    '#D32F2F',
+  errorText:   '#D32F2F',
+  disabled:    '#81c784',
+  hint:        '#888888',
 };
 
 export default function ManualEntryScreen({ navigation }) {
@@ -46,6 +58,9 @@ export default function ManualEntryScreen({ navigation }) {
   const [boron,          setBoron]          = useState('');
   const [ph,             setPh]             = useState('');
   const [ec,             setEc]             = useState('');
+
+  // Per-field focus state for styled focus border
+  const [focusedField, setFocusedField] = useState(null);
 
   // Refs for focus chain (returnKeyType="next")
   const refLandSize      = useRef(null);
@@ -86,6 +101,48 @@ export default function ManualEntryScreen({ navigation }) {
       setErrorMsg(`Please fill all fields with valid numbers: ${invalidFields.join(', ')}`);
       return;
     }
+    if (parsed.ph < 0 || parsed.ph > 14) {
+      setErrorMsg("pH must be between 0 and 14.");
+      return;
+    }
+    if (parsed.ec < 0 || parsed.ec > 16) {
+      setErrorMsg("EC must be between 0 and 16 dS/m.");
+      return;
+    }
+    if (parsed.nitrogen < 0 || parsed.nitrogen > 600) {
+      setErrorMsg("Nitrogen must be between 0 and 600 kg/ha.");
+      return;
+    }
+    if (parsed.phosphorus < 0 || parsed.phosphorus > 56) {
+      setErrorMsg("Phosphorus must be between 0 and 56 kg/ha (ICAR limit)."); return;
+    }
+    if (parsed.potassium < 0 || parsed.potassium > 1120) {
+      setErrorMsg("Potassium must be between 0 and 1120 kg/ha (ICAR limit)."); return;
+    }
+    if (parsed.organicCarbon < 0 || parsed.organicCarbon > 5) {
+      setErrorMsg("Organic Carbon must be between 0 and 5%."); return;
+    }
+    if (parsed.sulphur < 0 || parsed.sulphur > 80) {
+      setErrorMsg("Sulphur must be between 0 and 80 mg/kg."); return;
+    }
+    if (parsed.zinc < 0 || parsed.zinc > 20) {
+      setErrorMsg("Zinc must be between 0 and 20 mg/kg."); return;
+    }
+    if (parsed.iron < 0 || parsed.iron > 200) {
+      setErrorMsg("Iron must be between 0 and 200 mg/kg."); return;
+    }
+    if (parsed.copper < 0 || parsed.copper > 20) {
+      setErrorMsg("Copper must be between 0 and 20 mg/kg."); return;
+    }
+    if (parsed.manganese < 0 || parsed.manganese > 100) {
+      setErrorMsg("Manganese must be between 0 and 100 mg/kg."); return;
+    }
+    if (parsed.boron < 0 || parsed.boron > 5) {
+      setErrorMsg("Boron must be between 0 and 5 mg/kg."); return;
+    }
+    if (parsed.landSize <= 0 || parsed.landSize > 500) {
+      setErrorMsg("Land size must be between 0.1 and 500 acres."); return;
+    }
     const soilData = {
       nitrogen: parsed.nitrogen, phosphorus: parsed.phosphorus, potassium: parsed.potassium,
       ph: parsed.ph, ec: parsed.ec, organic_carbon: parsed.organicCarbon,
@@ -103,26 +160,59 @@ export default function ManualEntryScreen({ navigation }) {
     }
   };
 
-  // ─── Shared input style ───────────────────────────────────────────────────
-  const inputProps = {
-    style: styles.input,
-    keyboardType: 'numeric',
-    placeholderTextColor: C.placeholder,
-  };
+  // ─── Shared input style builder (focus-aware) ────────────────────────────
+  const inputStyle = (fieldName) => [
+    styles.input,
+    focusedField === fieldName && styles.inputFocused,
+  ];
+
+  // ─── Reusable input row renderer ────────────────────────────────────────
+  const renderField = ({ fieldName, label, unit, ref, value, onChange, placeholder, returnKey, onSubmit, isLast }) => (
+    <View style={[styles.inputRow, isLast && styles.inputRowLast]} key={fieldName}>
+      <View style={styles.labelBlock}>
+        <Text style={styles.label}>{label}</Text>
+        {unit ? <Text style={styles.unitLabel}>{unit}</Text> : null}
+      </View>
+      <TextInput
+        ref={ref}
+        style={inputStyle(fieldName)}
+        keyboardType="numeric"
+        placeholderTextColor={C.placeholder}
+        placeholder={placeholder}
+        value={value}
+        onChangeText={onChange}
+        returnKeyType={returnKey || 'next'}
+        onSubmitEditing={onSubmit}
+        onFocus={() => setFocusedField(fieldName)}
+        onBlur={() => setFocusedField(null)}
+      />
+    </View>
+  );
 
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       style={styles.root}
       contentContainerStyle={styles.container}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
+      enableOnAndroid={true}
+      extraScrollHeight={100}
     >
-      {/* ── Hero Banner ── */}
+      {/* ── Hero Banner — matches HomeScreen exactly ── */}
       <View style={styles.hero}>
-        <View style={styles.decCircle} />
+        {/* Decorative circles */}
+        <View style={styles.decCircle1} />
+        <View style={styles.decCircle2} />
+
         <Text style={styles.heroEmoji}>✏️</Text>
         <Text style={styles.heroTitle}>Manual Entry</Text>
         <Text style={styles.heroSub}>मैन्युअल प्रविष्टि  ·  ಹಸ್ತಚಾಲಿತ ನಮೂದು</Text>
+
+        {/* Premium golden accent line */}
+        <View style={styles.goldenLine} />
+
+        {/* Wave divider */}
+        <View style={styles.wave} />
       </View>
 
       <View style={styles.body}>
@@ -130,21 +220,15 @@ export default function ManualEntryScreen({ navigation }) {
         {/* ── Land Size ── */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionDot, { backgroundColor: '#0277bd' }]} />
+            <View style={[styles.sectionDot, { backgroundColor: '#0277BD' }]} />
             <Text style={styles.sectionTitle}>📐 Land Size</Text>
           </View>
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Acres  </Text>
-            <TextInput
-              ref={refLandSize}
-              {...inputProps}
-              placeholder="e.g. 5"
-              value={landSize}
-              onChangeText={setLandSize}
-              returnKeyType="next"
-              onSubmitEditing={() => refNitrogen.current?.focus()}
-            />
-          </View>
+          {renderField({
+            fieldName: 'landSize', label: 'Acres', unit: 'acres',
+            ref: refLandSize, value: landSize, onChange: setLandSize,
+            placeholder: 'e.g. 5', returnKey: 'next',
+            onSubmit: () => refNitrogen.current?.focus(), isLast: true,
+          })}
         </View>
 
         {/* ── Macronutrients ── */}
@@ -152,186 +236,107 @@ export default function ManualEntryScreen({ navigation }) {
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionDot, { backgroundColor: C.primary }]} />
             <Text style={styles.sectionTitle}>📊 Macronutrients</Text>
-            <Text style={styles.sectionUnit}>kg / ha</Text>
+            <View style={styles.unitBadge}><Text style={styles.unitBadgeText}>kg / ha</Text></View>
           </View>
 
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Nitrogen (N)</Text>
-            <TextInput
-              ref={refNitrogen}
-              {...inputProps}
-              placeholder="e.g. 320"
-              value={nitrogen}
-              onChangeText={setNitrogen}
-              returnKeyType="next"
-              onSubmitEditing={() => refPhosphorus.current?.focus()}
-            />
-          </View>
-
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Phosphorus (P)</Text>
-            <TextInput
-              ref={refPhosphorus}
-              {...inputProps}
-              placeholder="e.g. 18"
-              value={phosphorus}
-              onChangeText={setPhosphorus}
-              returnKeyType="next"
-              onSubmitEditing={() => refPotassium.current?.focus()}
-            />
-          </View>
-
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Potassium (K)</Text>
-            <TextInput
-              ref={refPotassium}
-              {...inputProps}
-              placeholder="e.g. 200"
-              value={potassium}
-              onChangeText={setPotassium}
-              returnKeyType="next"
-              onSubmitEditing={() => refOrganicCarbon.current?.focus()}
-            />
-          </View>
-
-          <View style={[styles.inputRow, styles.inputRowLast]}>
-            <Text style={styles.label}>Organic Carbon (%)</Text>
-            <TextInput
-              ref={refOrganicCarbon}
-              {...inputProps}
-              placeholder="e.g. 0.62"
-              value={organicCarbon}
-              onChangeText={setOrganicCarbon}
-              returnKeyType="next"
-              onSubmitEditing={() => refSulphur.current?.focus()}
-            />
-          </View>
+          {renderField({
+            fieldName: 'nitrogen', label: 'Nitrogen (N)', unit: 'kg/ha',
+            ref: refNitrogen, value: nitrogen, onChange: setNitrogen,
+            placeholder: 'e.g. 320', returnKey: 'next',
+            onSubmit: () => refPhosphorus.current?.focus(),
+          })}
+          {renderField({
+            fieldName: 'phosphorus', label: 'Phosphorus (P)', unit: 'kg/ha',
+            ref: refPhosphorus, value: phosphorus, onChange: setPhosphorus,
+            placeholder: 'e.g. 18', returnKey: 'next',
+            onSubmit: () => refPotassium.current?.focus(),
+          })}
+          {renderField({
+            fieldName: 'potassium', label: 'Potassium (K)', unit: 'kg/ha',
+            ref: refPotassium, value: potassium, onChange: setPotassium,
+            placeholder: 'e.g. 200', returnKey: 'next',
+            onSubmit: () => refOrganicCarbon.current?.focus(),
+          })}
+          {renderField({
+            fieldName: 'organicCarbon', label: 'Organic Carbon (%)', unit: '≤ 5%',
+            ref: refOrganicCarbon, value: organicCarbon, onChange: setOrganicCarbon,
+            placeholder: 'e.g. 0.62', returnKey: 'next',
+            onSubmit: () => refSulphur.current?.focus(), isLast: true,
+          })}
         </View>
 
         {/* ── Micronutrients ── */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionDot, { backgroundColor: '#e65100' }]} />
+            <View style={[styles.sectionDot, { backgroundColor: '#E65100' }]} />
             <Text style={styles.sectionTitle}>🔬 Micronutrients</Text>
-            <Text style={styles.sectionUnit}>mg / kg</Text>
+            <View style={styles.unitBadge}><Text style={styles.unitBadgeText}>mg / kg</Text></View>
           </View>
 
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Sulphur (S)</Text>
-            <TextInput
-              ref={refSulphur}
-              {...inputProps}
-              placeholder="e.g. 12.5"
-              value={sulphur}
-              onChangeText={setSulphur}
-              returnKeyType="next"
-              onSubmitEditing={() => refZinc.current?.focus()}
-            />
-          </View>
-
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Zinc (Zn)</Text>
-            <TextInput
-              ref={refZinc}
-              {...inputProps}
-              placeholder="e.g. 0.8"
-              value={zinc}
-              onChangeText={setZinc}
-              returnKeyType="next"
-              onSubmitEditing={() => refIron.current?.focus()}
-            />
-          </View>
-
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Iron (Fe)</Text>
-            <TextInput
-              ref={refIron}
-              {...inputProps}
-              placeholder="e.g. 5.2"
-              value={iron}
-              onChangeText={setIron}
-              returnKeyType="next"
-              onSubmitEditing={() => refCopper.current?.focus()}
-            />
-          </View>
-
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Copper (Cu)</Text>
-            <TextInput
-              ref={refCopper}
-              {...inputProps}
-              placeholder="e.g. 0.3"
-              value={copper}
-              onChangeText={setCopper}
-              returnKeyType="next"
-              onSubmitEditing={() => refManganese.current?.focus()}
-            />
-          </View>
-
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Manganese (Mn)</Text>
-            <TextInput
-              ref={refManganese}
-              {...inputProps}
-              placeholder="e.g. 3.1"
-              value={manganese}
-              onChangeText={setManganese}
-              returnKeyType="next"
-              onSubmitEditing={() => refBoron.current?.focus()}
-            />
-          </View>
-
-          <View style={[styles.inputRow, styles.inputRowLast]}>
-            <Text style={styles.label}>Boron (B)</Text>
-            <TextInput
-              ref={refBoron}
-              {...inputProps}
-              placeholder="e.g. 0.6"
-              value={boron}
-              onChangeText={setBoron}
-              returnKeyType="next"
-              onSubmitEditing={() => refPh.current?.focus()}
-            />
-          </View>
+          {renderField({
+            fieldName: 'sulphur', label: 'Sulphur (S)', unit: 'mg/kg',
+            ref: refSulphur, value: sulphur, onChange: setSulphur,
+            placeholder: 'e.g. 12.5', returnKey: 'next',
+            onSubmit: () => refZinc.current?.focus(),
+          })}
+          {renderField({
+            fieldName: 'zinc', label: 'Zinc (Zn)', unit: 'mg/kg',
+            ref: refZinc, value: zinc, onChange: setZinc,
+            placeholder: 'e.g. 0.8', returnKey: 'next',
+            onSubmit: () => refIron.current?.focus(),
+          })}
+          {renderField({
+            fieldName: 'iron', label: 'Iron (Fe)', unit: 'mg/kg',
+            ref: refIron, value: iron, onChange: setIron,
+            placeholder: 'e.g. 5.2', returnKey: 'next',
+            onSubmit: () => refCopper.current?.focus(),
+          })}
+          {renderField({
+            fieldName: 'copper', label: 'Copper (Cu)', unit: 'mg/kg',
+            ref: refCopper, value: copper, onChange: setCopper,
+            placeholder: 'e.g. 0.3', returnKey: 'next',
+            onSubmit: () => refManganese.current?.focus(),
+          })}
+          {renderField({
+            fieldName: 'manganese', label: 'Manganese (Mn)', unit: 'mg/kg',
+            ref: refManganese, value: manganese, onChange: setManganese,
+            placeholder: 'e.g. 3.1', returnKey: 'next',
+            onSubmit: () => refBoron.current?.focus(),
+          })}
+          {renderField({
+            fieldName: 'boron', label: 'Boron (B)', unit: 'mg/kg',
+            ref: refBoron, value: boron, onChange: setBoron,
+            placeholder: 'e.g. 0.6', returnKey: 'next',
+            onSubmit: () => refPh.current?.focus(), isLast: true,
+          })}
         </View>
 
         {/* ── Soil Properties ── */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionDot, { backgroundColor: '#558b2f' }]} />
+            <View style={[styles.sectionDot, { backgroundColor: '#558B2F' }]} />
             <Text style={styles.sectionTitle}>🌡️ Soil Properties</Text>
           </View>
 
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>pH  (0 – 14)</Text>
-            <TextInput
-              ref={refPh}
-              {...inputProps}
-              placeholder="e.g. 6.8"
-              value={ph}
-              onChangeText={setPh}
-              returnKeyType="next"
-              onSubmitEditing={() => refEc.current?.focus()}
-            />
-          </View>
-
-          <View style={[styles.inputRow, styles.inputRowLast]}>
-            <Text style={styles.label}>EC  (dS/m)</Text>
-            <TextInput
-              ref={refEc}
-              {...inputProps}
-              placeholder="e.g. 0.45"
-              value={ec}
-              onChangeText={setEc}
-              returnKeyType="done"
-            />
-          </View>
+          {renderField({
+            fieldName: 'ph', label: 'pH', unit: '0 – 14',
+            ref: refPh, value: ph, onChange: setPh,
+            placeholder: 'e.g. 6.8', returnKey: 'next',
+            onSubmit: () => refEc.current?.focus(),
+          })}
+          {renderField({
+            fieldName: 'ec', label: 'EC', unit: 'dS/m',
+            ref: refEc, value: ec, onChange: setEc,
+            placeholder: 'e.g. 0.45', returnKey: 'done',
+            isLast: true,
+          })}
         </View>
 
         {/* ── Error Box ── */}
         {errorMsg ? (
           <View style={styles.errorBox}>
-            <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
+            <Text style={styles.errorIcon}>⚠️</Text>
+            <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         ) : null}
 
@@ -356,54 +361,98 @@ export default function ManualEntryScreen({ navigation }) {
           All 13 fields are required for a complete analysis.
         </Text>
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
 
-  // Hero
+  container: { flexGrow: 1 },
+
+  // ── Hero — exact match to HomeScreen ──
   hero: {
-    backgroundColor: C.hero,
-    paddingTop: Platform.OS === 'android' ? 50 : 58,
-    paddingBottom: 44,
+    backgroundColor: C.heroDark,
+    paddingTop: Platform.OS === 'android' ? 48 : 56,
+    paddingBottom: 54,
     paddingHorizontal: 24,
     overflow: 'hidden',
     position: 'relative',
-    alignItems: 'flex-start',
   },
-  decCircle: {
-    position: 'absolute', width: 180, height: 180, borderRadius: 90,
-    backgroundColor: 'rgba(255,255,255,0.07)', top: -40, right: -40,
+  decCircle1: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: '#2E7D32',
+    top: -70,
+    right: -70,
+    opacity: 0.55,
   },
-  heroEmoji:  { fontSize: 32, marginBottom: 8 },
-  heroTitle:  { fontSize: 28, fontWeight: '800', color: '#fff', marginBottom: 4 },
-  heroSub:    { fontSize: 13, color: 'rgba(255,255,255,0.70)' },
+  decCircle2: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: '#388E3C',
+    bottom: 8,
+    left: -50,
+    opacity: 0.35,
+  },
+  heroEmoji: {
+    fontSize: 30,
+    marginBottom: 8,
+  },
+  heroTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#ffffff',
+    marginBottom: 4,
+    letterSpacing: 0.3,
+  },
+  heroSub: {
+    fontSize: 13,
+    color: C.subHero,
+    marginBottom: 14,
+  },
+  goldenLine: {
+    width: 60,
+    height: 2,
+    backgroundColor: C.golden,
+    borderRadius: 2,
+    marginBottom: 4,
+  },
+  wave: {
+    position: 'absolute',
+    bottom: -1,
+    left: 0,
+    right: 0,
+    height: 28,
+    backgroundColor: C.bg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
 
-  // Body
+  // ── Body ──
   body: {
     padding: 16,
     paddingBottom: 40,
-    marginTop: -20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     backgroundColor: C.bg,
   },
 
-  // Section card
+  // ── Section card ──
   sectionCard: {
     backgroundColor: C.card,
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 4,
+    paddingBottom: 8,
     marginBottom: 14,
-    elevation: 3,
-    shadowColor: '#1a5c2e',
+    elevation: 4,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 6,
+    shadowRadius: 8,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -411,83 +460,142 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#eef4ee',
+    borderBottomColor: '#EEF4EE',
   },
   sectionDot: {
-    width: 10, height: 10, borderRadius: 5, marginRight: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
   },
   sectionTitle: {
     flex: 1,
-    fontSize: 16, fontWeight: '700', color: C.label,
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.primaryDark,
   },
-  sectionUnit: {
-    fontSize: 12, color: C.sublabel, fontWeight: '600',
-    backgroundColor: C.accentLt, paddingHorizontal: 8, paddingVertical: 2,
-    borderRadius: 10,
+  unitBadge: {
+    backgroundColor: C.accentBg,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  unitBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.accentText,
   },
 
-  // Input row
+  // ── Input row ──
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
     gap: 10,
   },
-  inputRowLast: { marginBottom: 12 },
-  label: {
+  inputRowLast: {
+    marginBottom: 8,
+  },
+  labelBlock: {
     flex: 1,
+  },
+  label: {
     fontSize: 14,
-    fontWeight: '600',
-    color: C.label,
+    fontWeight: '700',
+    color: C.labelColor,
+    marginBottom: 2,
+  },
+  unitLabel: {
+    fontSize: 11,
+    color: C.unitColor,
+    fontWeight: '500',
   },
   input: {
-    flex: 1,
+    width: '55%',
     borderWidth: 1.5,
     borderColor: C.inputBdr,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     backgroundColor: C.inputBg,
-    color: '#1a3a22',
+    color: C.inputText,
+  },
+  inputFocused: {
+    borderColor: C.inputFocus,
+    borderWidth: 2,
   },
 
-  // Error Box
+  // ── Error Box ──
   errorBox: {
-    backgroundColor: '#ffebee',
+    backgroundColor: C.errorBg,
     borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.errorBdr,
     padding: 14,
     marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f44336',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    gap: 10,
+  },
+  errorIcon: {
+    fontSize: 18,
+    lineHeight: 22,
   },
   errorText: {
-    color: '#d32f2f',
+    flex: 1,
+    color: C.errorText,
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,
   },
 
-  // CTA
+  // ── CTA ──
   cta: {
-    backgroundColor: C.primary,
+    backgroundColor: C.primaryDark,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 17,
+    height: 56,
     borderRadius: 14,
     marginTop: 6,
-    marginBottom: 12,
-    elevation: 5,
-    shadowColor: C.primary,
+    marginBottom: 8,
+    elevation: 6,
+    shadowColor: C.primaryDark,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
-    shadowRadius: 8,
+    shadowRadius: 10,
     gap: 10,
   },
-  ctaDisabled: { backgroundColor: C.disabled, elevation: 0, shadowOpacity: 0 },
-  ctaText: { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
-  ctaArrow: { fontSize: 22, color: '#fff', fontWeight: '300' },
-  hint: { textAlign: 'center', fontSize: 12, color: C.sublabel, marginBottom: 20 },
+  ctaDisabled: {
+    backgroundColor: C.disabled,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  ctaText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  ctaArrow: {
+    fontSize: 22,
+    color: '#fff',
+    fontWeight: '300',
+  },
+
+  // ── Footer hint ──
+  hint: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: C.hint,
+    marginTop: 8,
+    marginBottom: 20,
+  },
 });

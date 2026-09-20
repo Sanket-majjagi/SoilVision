@@ -3,17 +3,22 @@ import json
 import base64
 import requests
 import logging
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env relative to this file — works regardless of CWD / how uvicorn is launched
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent.parent / ".env")
 
 logger = logging.getLogger(__name__)
 
 def analyze_image(image_bytes: bytes, mime_type: str) -> dict:
     """
-    Analyzes a soil meter photo or soil health card using OpenRouter (Gemini 2.0 Flash).
+    Analyzes a soil meter photo or soil health card using Google Gemini API (Gemini 2.0 Flash).
     Returns a dictionary parsed from the model's JSON response.
     """
-    api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        logger.error("OPENROUTER_API_KEY is not set.")
+        logger.error("GEMINI_API_KEY is not set.")
         return {"success": False, "confidence": 0.0, "reason": "Server configuration error: Missing API Key."}
 
     b64 = base64.b64encode(image_bytes).decode('utf-8')
@@ -47,24 +52,30 @@ Return ONLY the JSON. No markdown, no explanation.
 """
 
     headers = {
-        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     
     payload = {
-        "model": "google/gemini-2.0-flash-001",
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
-                {"type": "text", "text": prompt.strip()}
-            ]
-        }]
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "inlineData": {
+                            "mimeType": mime_type,
+                            "data": b64
+                        }
+                    },
+                    {
+                        "text": prompt.strip()
+                    }
+                ]
+            }
+        ]
     }
 
     try:
         response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
             headers=headers,
             json=payload,
             timeout=30
@@ -72,7 +83,7 @@ Return ONLY the JSON. No markdown, no explanation.
         response.raise_for_status()
         
         data = response.json()
-        content = data["choices"][0]["message"]["content"]
+        content = data["candidates"][0]["content"]["parts"][0]["text"]
         
         # Strip markdown fences (e.g., ```json ... ```)
         content = content.strip()
@@ -102,7 +113,7 @@ Return ONLY the JSON. No markdown, no explanation.
         return result
         
     except requests.exceptions.RequestException as e:
-        logger.error(f"OpenRouter API request failed: {e}")
+        logger.error(f"Gemini API request failed: {e}")
         return {"success": False, "confidence": 0.0, "reason": f"Network error during image analysis."}
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse JSON response: {e}\nRaw content: {content}")

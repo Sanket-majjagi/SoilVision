@@ -10,13 +10,24 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { BASE_URL, ENDPOINTS } from '../constants/api';
+import { analyzeVision } from '../services/api';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  hero: '#1a5c2e', primary: '#2e7d32', accent: '#4caf50', accentLt: '#e8f5e9',
-  bg: '#f0f4f0', card: '#ffffff', label: '#1a3a22', sublabel: '#6b8f6b',
-  disabled: '#81c784',
+  heroDark:    '#1B5E20',
+  heroMid:     '#2E7D32',
+  heroLight:   '#388E3C',
+  golden:      '#C8A951',
+  bg:          '#F4F6F4',
+  card:        '#ffffff',
+  primary:     '#2E7D32',
+  primaryDark: '#1B5E20',
+  accentBg:    '#E8F5E9',
+  subHero:     '#A5D6A7',
+  disabled:    '#81c784',
+  errorBg:     '#ffffff',
+  errorBdr:    '#D32F2F',
+  errorText:   '#D32F2F',
 };
 
 export default function PhotoScanScreen({ navigation }) {
@@ -29,7 +40,7 @@ export default function PhotoScanScreen({ navigation }) {
     setErrorMsg('');
     let result;
     const options = {
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       allowsEditing: true,
       quality: 0.8,
     };
@@ -55,58 +66,15 @@ export default function PhotoScanScreen({ navigation }) {
     }
   };
 
-  // 2. Upload API call
+  // 2. Analyse via centralised api.js (weather auto-injected)
   const handleAnalyze = async () => {
     if (!imageUri) return;
     setErrorMsg('');
     setLoading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('image_type', 'meter');
-
-      // Setup platform-safe FormData appending
-      if (Platform.OS === 'web') {
-        const res = await fetch(imageUri);
-        const blob = await res.blob();
-        formData.append('file', blob, 'soil_photo.jpg');
-      } else {
-        formData.append('file', {
-          uri: imageUri,
-          type: 'image/jpeg',
-          name: 'soil_photo.jpg',
-        });
-      }
-
-      const response = await fetch(`${BASE_URL}${ENDPOINTS.VISION}`, {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        let errDesc = 'Failed to analyze image.';
-        try {
-          const errJson = await response.json();
-          errDesc = errJson.detail || errJson.message || errDesc;
-        } catch (e) {}
-        throw new Error(errDesc);
-      }
-
-      const result = await response.json();
-
-      // Ensure API explicitly returned success before navigating
-      // If the backend vision AI script returns success: false it will be caught here
-      if (result.success === false) {
-        throw new Error(
-          "Could not read soil values from this image.\nPlease make sure the photo clearly shows a soil test meter display or Soil Health Card with visible numbers.\nTry Manual Entry instead for best results."
-        );
-      }
-
-      // The backend Vision AI might return a nested 'resultData' via analyze endpoint proxy,
-      // But typically we pass the root object. Let's pass root to ResultsScreen.
+      const result = await analyzeVision(imageUri, 'meter');
       navigation.navigate('Results', { resultData: result });
-
     } catch (error) {
       setErrorMsg(error.message || 'Network error while analyzing photo.');
     } finally {
@@ -120,59 +88,81 @@ export default function PhotoScanScreen({ navigation }) {
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Section 1: Hero ── */}
+      {/* ── Hero — matches HomeScreen exactly ── */}
       <View style={styles.hero}>
-        <View style={styles.decCircle} />
+        <View style={styles.decCircle1} />
+        <View style={styles.decCircle2} />
+
         <Text style={styles.heroEmoji}>📷</Text>
         <Text style={styles.heroTitle}>Photo Scan</Text>
         <Text style={styles.heroSub}>फोटो स्कैन  ·  ಫೋಟೋ ಸ್ಕ್ಯಾನ್</Text>
+
+        <View style={styles.goldenLine} />
+        <View style={styles.wave} />
       </View>
 
       <View style={styles.body}>
 
-        {/* ── Section 2: Instructions ── */}
+        {/* ── Instructions Card ── */}
         <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionDot, { backgroundColor: '#0277BD' }]} />
+            <Text style={styles.sectionTitle}>📋 Instructions</Text>
+          </View>
           <Text style={styles.instructionText}>
             Take a clear photo of your soil test meter display or Soil Health Card.
           </Text>
           <View style={styles.tipsRow}>
-            <Text style={styles.tipItem}>💡 Good lighting</Text>
-            <Text style={styles.tipItem}>🤚 Hold camera steady</Text>
-            <Text style={styles.tipItem}>✅ Make sure values are visible</Text>
+            <View style={styles.tipItem}>
+              <Text style={styles.tipEmoji}>💡</Text>
+              <Text style={styles.tipText}>Good lighting</Text>
+            </View>
+            <View style={styles.tipItem}>
+              <Text style={styles.tipEmoji}>🤚</Text>
+              <Text style={styles.tipText}>Hold camera steady</Text>
+            </View>
+            <View style={styles.tipItem}>
+              <Text style={styles.tipEmoji}>✅</Text>
+              <Text style={styles.tipText}>Values must be visible</Text>
+            </View>
           </View>
         </View>
 
-        {/* ── Section 3: Image Picker ── */}
+        {/* ── Image Selection Card ── */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionDot, { backgroundColor: '#0277bd' }]} />
-            <Text style={styles.sectionTitle}>Image Selection</Text>
+            <View style={[styles.sectionDot, { backgroundColor: C.primary }]} />
+            <Text style={styles.sectionTitle}>🖼️ Image Selection</Text>
           </View>
 
           <View style={styles.pickerRow}>
-            <TouchableOpacity style={styles.pickerBtn} onPress={() => pickImage(true)}>
-              <Text style={styles.pickerBtnText}>📷 Take Photo</Text>
+            <TouchableOpacity style={styles.pickerBtnCamera} onPress={() => pickImage(true)} activeOpacity={0.85}>
+              <Text style={styles.pickerBtnCameraText}>📷  Take Photo</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.pickerBtnAlt} onPress={() => pickImage(false)}>
-              <Text style={styles.pickerBtnAltText}>🖼️ Choose from Gallery</Text>
+            <TouchableOpacity style={styles.pickerBtnGallery} onPress={() => pickImage(false)} activeOpacity={0.85}>
+              <Text style={styles.pickerBtnGalleryText}>🖼️  Gallery</Text>
             </TouchableOpacity>
           </View>
 
           {imageUri && (
             <View style={styles.previewContainer}>
               <Image source={{ uri: imageUri }} style={styles.previewImage} />
+              <View style={styles.previewBadge}>
+                <Text style={styles.previewBadgeText}>✓ Photo selected</Text>
+              </View>
             </View>
           )}
         </View>
 
-        {/* ── Error Box ── */}
+        {/* ── Error Box — matches ManualEntryScreen ── */}
         {errorMsg ? (
           <View style={styles.errorBox}>
-            <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
+            <Text style={styles.errorIcon}>⚠️</Text>
+            <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         ) : null}
 
-        {/* ── Section 4: Analyse Button ── */}
+        {/* ── Analyse Button — only shown after image selected ── */}
         {imageUri ? (
           <TouchableOpacity
             style={[styles.cta, loading && styles.ctaDisabled]}
@@ -191,10 +181,11 @@ export default function PhotoScanScreen({ navigation }) {
           </TouchableOpacity>
         ) : null}
 
-        {/* ── Section 5: Note Card ── */}
+        {/* ── Info Banner ── */}
         <View style={styles.noteBox}>
+          <Text style={styles.noteIcon}>ℹ️</Text>
           <Text style={styles.noteText}>
-            💡 For best results, use <Text style={{fontWeight: 'bold'}}>Manual Entry</Text> if photo is unclear.
+            For best results, use <Text style={styles.noteLink}>Manual Entry</Text> if the photo is unclear or values are hard to read.
           </Text>
         </View>
 
@@ -206,133 +197,229 @@ export default function PhotoScanScreen({ navigation }) {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  container: {},
+  container: { flexGrow: 1 },
 
-  // Hero
+  // ── Hero ──
   hero: {
-    backgroundColor: C.hero,
-    paddingTop: Platform.OS === 'android' ? 50 : 58,
-    paddingBottom: 52,
+    backgroundColor: C.heroDark,
+    paddingTop: Platform.OS === 'android' ? 48 : 56,
+    paddingBottom: 54,
     paddingHorizontal: 24,
     overflow: 'hidden',
     position: 'relative',
   },
-  decCircle: {
-    position: 'absolute', width: 200, height: 200, borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -50,
+  decCircle1: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: '#2E7D32',
+    top: -70,
+    right: -70,
+    opacity: 0.55,
   },
-  heroEmoji: { fontSize: 36, marginBottom: 8 },
-  heroTitle: { fontSize: 28, fontWeight: '800', color: '#fff', marginBottom: 4 },
-  heroSub:   { fontSize: 13, color: 'rgba(255,255,255,0.70)' },
+  decCircle2: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: '#388E3C',
+    bottom: 8,
+    left: -50,
+    opacity: 0.35,
+  },
+  heroEmoji: { fontSize: 30, marginBottom: 8 },
+  heroTitle: { fontSize: 30, fontWeight: '800', color: '#ffffff', marginBottom: 4, letterSpacing: 0.3 },
+  heroSub:   { fontSize: 13, color: C.subHero, marginBottom: 14 },
+  goldenLine: {
+    width: 60,
+    height: 2,
+    backgroundColor: C.golden,
+    borderRadius: 2,
+    marginBottom: 4,
+  },
+  wave: {
+    position: 'absolute',
+    bottom: -1,
+    left: 0,
+    right: 0,
+    height: 28,
+    backgroundColor: C.bg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
 
-  // Body
+  // ── Body ──
   body: {
-    padding: 16, paddingBottom: 50, marginTop: -20,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 16,
+    paddingBottom: 50,
     backgroundColor: C.bg,
   },
 
-  // Cards
+  // ── Section card ──
   sectionCard: {
-    backgroundColor: C.card, borderRadius: 16,
-    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16,
-    marginBottom: 14, elevation: 3,
-    shadowColor: '#1a5c2e', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 6,
+    backgroundColor: C.card,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    marginBottom: 14,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
   },
   sectionHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    marginBottom: 14, paddingBottom: 10,
-    borderBottomWidth: 1, borderBottomColor: '#eef4ee',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF4EE',
   },
-  sectionDot:  { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
-  sectionTitle:{ fontSize: 16, fontWeight: '700', color: C.label },
+  sectionDot:   { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: C.primaryDark, flex: 1 },
 
-  // Instructions
+  // ── Instructions ──
   instructionText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: C.label,
-    marginBottom: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2D2D2D',
+    marginBottom: 14,
     lineHeight: 22,
   },
-  tipsRow: { gap: 6 },
-  tipItem: { fontSize: 13, color: '#555', fontWeight: '500' },
+  tipsRow: { gap: 8 },
+  tipItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tipEmoji: { fontSize: 15, width: 22 },
+  tipText:  { fontSize: 13, color: '#555', fontWeight: '500' },
 
-  // Picker
-  pickerRow: { gap: 10, marginBottom: 4 },
-  pickerBtn: {
-    backgroundColor: '#0277bd',
+  // ── Image picker buttons ──
+  pickerRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 4,
+  },
+  pickerBtnCamera: {
+    flex: 1,
+    backgroundColor: C.primaryDark,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
+    elevation: 3,
+    shadowColor: C.primaryDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
-  pickerBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  pickerBtnAlt: {
+  pickerBtnCameraText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  pickerBtnGallery: {
+    flex: 1,
     backgroundColor: '#fff',
     paddingVertical: 14,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#e1f5fe',
+    borderColor: C.primary,
     alignItems: 'center',
   },
-  pickerBtnAltText: { color: '#0277bd', fontSize: 15, fontWeight: '800' },
-  
-  // Preview
+  pickerBtnGalleryText: {
+    color: C.primary,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  // ── Preview ──
   previewContainer: {
-    marginTop: 16,
+    marginTop: 14,
     borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#eef4ee',
+    borderWidth: 1.5,
+    borderColor: '#C8E6C9',
+    position: 'relative',
   },
   previewImage: {
     width: '100%',
-    height: 200,
+    height: 210,
     resizeMode: 'cover',
   },
+  previewBadge: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    backgroundColor: 'rgba(27,94,32,0.90)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  previewBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 
-  // Error Box
+  // ── Error Box — matches ManualEntryScreen ──
   errorBox: {
-    backgroundColor: '#ffebee',
+    backgroundColor: C.errorBg,
     borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.errorBdr,
     padding: 14,
     marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f44336',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    gap: 10,
   },
+  errorIcon: { fontSize: 18, lineHeight: 22 },
   errorText: {
-    color: '#d32f2f',
+    flex: 1,
+    color: C.errorText,
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,
   },
 
-  // CTA
+  // ── CTA ──
   cta: {
-    backgroundColor: C.primary, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 17, borderRadius: 14,
-    elevation: 5, shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35, shadowRadius: 8, gap: 10,
+    backgroundColor: C.primaryDark,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
+    borderRadius: 14,
     marginBottom: 16,
+    elevation: 6,
+    shadowColor: C.primaryDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    gap: 10,
   },
   ctaDisabled: { backgroundColor: C.disabled, elevation: 0, shadowOpacity: 0 },
-  ctaText: { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
+  ctaText:  { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   ctaArrow: { fontSize: 22, color: '#fff', fontWeight: '300' },
 
-  // Note Box
+  // ── Info banner ──
   noteBox: {
-    backgroundColor: C.accentLt,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: C.accentBg,
     borderRadius: 10,
     padding: 14,
-    borderLeftWidth: 4,
-    borderLeftColor: C.accent,
+    borderLeftWidth: 3,
+    borderLeftColor: C.primaryDark,
+    gap: 8,
+    marginBottom: 20,
   },
-  noteText: {
-    fontSize: 13,
-    color: C.primary,
-    lineHeight: 20,
-  },
+  noteIcon: { fontSize: 16 },
+  noteText: { flex: 1, fontSize: 13, color: C.primaryDark, lineHeight: 20 },
+  noteLink: { fontWeight: '700', textDecorationLine: 'underline' },
 });
