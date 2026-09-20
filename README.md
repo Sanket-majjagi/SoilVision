@@ -52,8 +52,6 @@ npx expo start
 - `OPENWEATHER_API_KEY` — free tier at [openweathermap.org](https://openweathermap.org)
 - `DATA_GOV_API_KEY` — free at [data.gov.in](https://data.gov.in)
 
-## 🖼️ Screenshots
-*(add 2–4 screenshots here — home screen, photo scan, results/report)*
 
 ## ⚖️ License
 MIT
